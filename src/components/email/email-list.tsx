@@ -6,8 +6,12 @@ import EmailCard from "./email-card";
 import { api } from "~/trpc/react";
 import Link from "next/link";
 
-const EmailsList: React.FC = () => {
-  const { data: emailsList } = api.emails.fetchEmails.useQuery();
+interface EmailsListProps {
+  userId: string
+}
+
+const EmailsList = ({userId}: EmailsListProps) => {
+  const { data: emailsList } = api.emails.fetchEmails.useQuery({userId});
 
   const renderedEmails = emailsList?.map((email, index) => {
     return (

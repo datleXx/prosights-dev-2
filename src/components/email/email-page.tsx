@@ -13,6 +13,9 @@ const EmailPage = () => {
     await signOut(); 
     router.push('/')
   }
+
+  const {data: session} = useSession(); 
+
   return (
     <div className="min-h-screen bg-gray-100 p-8">
       <button onClick={handleSignOut} className="mb-4 rounded-md bg-blue-500 px-4 py-2 text-white">
@@ -51,7 +54,7 @@ const EmailPage = () => {
             className="mb-4 w-full rounded-md border border-gray-300 p-2"
           />
           <div>
-            <EmailsList />
+            <EmailsList userId={session?.user.id ?? ""}/>
           </div>
         </div>
       </div>

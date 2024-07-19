@@ -10,9 +10,14 @@ import { emails, posts } from "~/server/db/schema";
 
 export const emailsRouter = createTRPCRouter({
   fetchEmails: protectedProcedure
-  .query(async({ctx}) => {
+  .input(
+    z.object({
+      userId: z.string()
+    })
+  )
+  .query(async({ctx, input}) => {
     try {
-        const emailsList = await ctx.db.select().from(emails).limit(15).orderBy(desc(emails.date));
+        const emailsList = await ctx.db.select().from(emails).where(eq(emails.userId, input.userId)).limit(15).orderBy(desc(emails.date));
         return emailsList; 
     }
     catch (e) {
