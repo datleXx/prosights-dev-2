@@ -1,0 +1,1 @@
+ALTER TABLE "aichat_email" ADD COLUMN "content" text;

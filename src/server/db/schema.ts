@@ -136,4 +136,20 @@ export const emails = createTable("email", {
   subject: varchar("subject", { length: 255 }),
   from: varchar("from", { length: 255 }),
   date: timestamp("date", { withTimezone: true }),
+  content: text("content"), 
+  mimeType: text("mime_type")
+
+});
+
+export const attachments = createTable("attachments", {
+  id: varchar("id", { length: 255 })
+    .notNull()
+    .primaryKey(),
+  emailId: varchar("email_id", { length: 255 })
+    .notNull()
+    .references(() => emails.id),
+  filename: varchar("filename", { length: 255 }),
+  mimeType: varchar("mime_type", { length: 255 }),
+  size: integer("size"),
+  data: text("data"),
 });

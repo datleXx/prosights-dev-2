@@ -1,4 +1,4 @@
-import { desc } from "drizzle-orm";
+import { desc, eq } from "drizzle-orm";
 import { z } from "zod";
 
 import {
@@ -14,6 +14,22 @@ export const emailsRouter = createTRPCRouter({
     try {
         const emailsList = await ctx.db.select().from(emails).limit(15).orderBy(desc(emails.date));
         return emailsList; 
+    }
+    catch (e) {
+        console.log(e)
+    }
+  }), 
+
+  fetchEmailbyId: protectedProcedure
+  .input(
+    z.object({
+      id: z.string()
+    })
+  )
+  .query(async({ctx, input}) => {
+    try {
+        const emailItem = await ctx.db.select().from(emails).where(eq(emails.id, input.id)).limit(1)
+        return emailItem[0]; 
     }
     catch (e) {
         console.log(e)

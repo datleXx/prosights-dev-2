@@ -3,17 +3,27 @@ import { getServerSession } from "next-auth";
 import { authOptions } from "~/server/auth";
 import { gmail_v1, google } from "googleapis";
 import { db } from "~/server/db";
-import { emails, attachments } from "~/server/db/schema"; // Import the emails and attachments table schema
+import { emails } from "~/server/db/schema"; // Import the emails table schema
 import { refreshAccessToken } from "~/lib/google";
 
+interface EmailData {
+  id: string;
+  userId: string;
+  snippet: string;
+  subject: string;
+  from: string;
+  date: Date;
+  content: string;
+}
+
 function decodeBase64Url(base64Url: string): string {
-  let base64 = base64Url.replace(/-/g, '+').replace(/_/g, '/');
+  let base64 = base64Url.replace(/-/g, "+").replace(/_/g, "/");
   switch (base64.length % 4) {
     case 2:
-      base64 += '==';
+      base64 += "==";
       break;
     case 3:
-      base64 += '=';
+      base64 += "=";
       break;
   }
   return atob(base64);
@@ -30,12 +40,12 @@ interface EmailBody {
   }[];
 }
 
-function getBody(message: gmail_v1.Schema$Message): EmailBody {
+function getBody(message: gmail_v1.Schema$Message) {
   const parts = message.payload?.parts ?? [];
   const result: EmailBody = {
-    text: '',
-    html: '',
-    attachments: []
+    text: "",
+    html: "",
+    attachments: [],
   };
 
   if (message.payload?.body?.data) {
@@ -43,13 +53,15 @@ function getBody(message: gmail_v1.Schema$Message): EmailBody {
     result.text = decodeBase64Url(message.payload.body.data);
   }
 
-  parts.forEach(part => {
+  parts.forEach((part) => {
+    if (!part.body?.data) return;
+
     switch (part.mimeType) {
-      case 'text/plain':
-        result.text += decodeBase64Url(part.body?.data ?? "");
+      case "text/plain":
+        result.text += decodeBase64Url(part.body.data);
         break;
-      case 'text/html':
-        result.html += decodeBase64Url(part.body?.data ?? "");
+      case "text/html":
+        result.html += decodeBase64Url(part.body.data);
         break;
       default:
         if (part.filename?.length) {
@@ -58,8 +70,8 @@ function getBody(message: gmail_v1.Schema$Message): EmailBody {
             result.attachments.push({
               filename: part.filename ?? "",
               mimeType: part.mimeType!,
-              data: part.body?.data ?? "",
-              attachmentId: part.body?.attachmentId ?? "",
+              data: part.body.data,
+              attachmentId: part.body.attachmentId ?? "",
             });
           }
         } else if (part.parts?.length) {
@@ -78,8 +90,14 @@ function getBody(message: gmail_v1.Schema$Message): EmailBody {
   return result;
 }
 
-async function fetchAndProcessMessages(gmail: gmail_v1.Gmail, userId: string): Promise<gmail_v1.Schema$Message[]> {
-  const response = await gmail.users.messages.list({ userId: "me", maxResults: 10 });
+async function fetchAndProcessMessages(
+  gmail: gmail_v1.Gmail,
+  userId: string,
+): Promise<gmail_v1.Schema$Message[]> {
+  const response = await gmail.users.messages.list({
+    userId: "me",
+    maxResults: 10,
+  });
   const messages = response.data.messages ?? [];
 
   for (const message of messages) {
@@ -89,27 +107,26 @@ async function fetchAndProcessMessages(gmail: gmail_v1.Gmail, userId: string): P
         id: message.id,
       });
 
+      console.log(msg.data.payload?.mimeType);
+
       // Extract relevant data from the message
       const dateHeader = msg.data.payload?.headers?.find(
         (header) => header.name === "Date",
       )?.value;
 
-      const emailBody = getBody(msg.data);
-
+      const emailBody = getBody(msg as gmail_v1.Schema$Message);
       const emailData = {
         id: message.id,
         userId: userId,
         snippet: msg.data.snippet ?? "",
         subject:
-          msg.data.payload?.headers?.find(
-            (header) => header.name === "Subject",
-          )?.value ?? "",
+          msg.data.payload?.headers?.find((header) => header.name === "Subject")
+            ?.value ?? "",
         from:
           msg.data.payload?.headers?.find((header) => header.name === "From")
             ?.value ?? "",
         date: dateHeader ? new Date(dateHeader) : new Date(),
-        content: emailBody.html === "" ? emailBody.text : emailBody.html, 
-        mimeType: msg.data.payload?.mimeType 
+        content: emailBody.text ?? emailBody.html ?? "",
       };
 
       // Insert or update the email in the database
@@ -117,21 +134,6 @@ async function fetchAndProcessMessages(gmail: gmail_v1.Gmail, userId: string): P
         target: emails.id,
         set: emailData,
       });
-
-      // Process attachments if any
-      for (const attachment of emailBody.attachments) {
-        const attachmentData = {
-          id:attachment.attachmentId ?? "",
-          emailId: message.id,
-          filename: attachment.filename,
-          mimeType: attachment.mimeType,
-          size: Buffer.byteLength(attachment.data, 'base64'),
-          data: attachment.data,
-        };
-
-        // Insert the attachment data into the database
-        await db.insert(attachments).values(attachmentData);
-      }
     }
   }
   return messages;
